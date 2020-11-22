@@ -1,0 +1,128 @@
+import bitarray as ba
+import numpy as np
+
+class RMCode:
+    
+    def __init__(self, r, m):
+        self.r = r
+        self.m = m
+        self.n = self.fun_n(self.m)
+        self.g = self.fun_g(self.r, self.m)
+        self.k = self.fun_k(self.r, self.m)
+            
+    def fun_k(self,r,m):
+        k = 0
+        for i in range(r + 1):
+            k += np.math.factorial(m)/(np.math.factorial(m - i)*np.math.factorial(i))
+        return int(k)
+    
+    def fun_n(self,m):
+        n  = 2**self.m
+        return n
+    
+    def fun_g(self, r, m):
+        if r == 0:
+            return np.ones((1, 2**m))
+        if r == m:
+            down = np.zeros((1, 2**m))
+            down[0][-1] = True
+            return np.concatenate([self.fun_g(m-1, m), down])
+        g_up = np.concatenate([self.fun_g(r, m-1), self.fun_g(r, m-1)], axis=1)
+        g_down = self.fun_g(r-1, m-1)
+        return np.concatenate([g_up, np.concatenate([np.zeros(np.shape(g_down)), g_down], axis=1)])
+
+    def code(self, line):
+        return np.dot(np.array(line.tolist(), dtype=int), self.g) % 2
+
+    def fun_H(self, i, m):
+        return np.kron(np.kron(np.eye(2**(m - i)), np.array([[1, 1], [1, -1]])), np.eye(2**(i - 1)))
+
+    def fun_vj(self, j):
+        line = bin(j)[2:]
+        vj = np.zeros(self.m, dtype=bool)
+        
+        for i in range(len(line)):
+            vj[i] = int(line[-i - 1]) == 1
+        return vj
+    
+    def encode(self, line):
+        return np.dot(np.array(line.tolist(), dtype=int), self.g) % 2
+
+    def decode(self, line):
+        tmp = np.ones(self.n)
+        
+        for i in range(self.n):
+            if line[i] == 1:
+                tmp[i] = 1
+            else:
+                tmp[i] = -1
+        wi = np.dot(tmp, self.fun_H(1, self.m))
+        
+        for i in range(2, self.m + 1):
+            wi = np.dot(wi, self.fun_H(i, self.m))
+        j = np.argmax(np.abs(wi))
+        vj = self.fun_vj(j)
+        result = np.zeros(len(vj) + 1, dtype=bool)
+        
+        for i in range(1, len(vj) + 1):
+            result[i] = vj[i - 1]
+        result[0] = wi[j] > 0
+        
+        return result
+
+    def to_barray(self, array):
+        barray = ba.bitarray('0'*len(array))
+        
+        for i in range(len(array)):
+            barray[i] = array[i]
+        return barray
+
+    def encoder(self, input, output):
+        barray = ba.bitarray()
+        
+        with open(input, 'rb') as inp:
+            barray.fromfile(inp)
+        encoded_arr = []
+        
+        for i in range(0, len(barray),self.k):
+            tmp = barray[i:i+self.k]
+            code = self.encode(tmp)
+            
+            for k in range (0,8):
+                encoded_arr.append(code[k])
+            encoded_arr[1]=True
+
+        with open(output, 'wb') as out:
+            self.to_barray(encoded_arr).tofile(out)
+
+    def decoder(self, input, output):
+        barray = ba.bitarray()
+        
+        with open(input, 'rb') as inp:
+            barray.fromfile(inp)
+        decoded_arr = []
+        
+        for i in range(0, len(barray), self.n):
+            tmp = barray[i: i + self.n]
+            decode = self.decode(tmp)
+            
+            for k in range (0,4):
+                decoded_arr.append(decode[k])
+
+        with open(output, 'wb') as out:
+            self.to_barray(decoded_arr).tofile(out)
+    
+        
+        
+
+if __name__ == "__main__":
+    r = 1
+    m = 3
+    cur = RMCode(r, m)
+    
+    #Matrix G
+    matrix_g = cur.fun_g(r,m)
+    print(matrix_g)
+
+    cur.encoder("test1.txt", "test1_coded.txt")
+    cur.decoder("test1_coded.txt", "test1_decoded.txt")
