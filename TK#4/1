@@ -1,0 +1,82 @@
+import bitarray as ba
+import numpy as np
+
+B_sub = [[1, 1, 0, 1, 1, 1, 0, 0, 0, 1, 0, 1],
+         [1, 0, 1, 1, 1, 0, 0, 0, 1, 0, 1, 1],
+         [0, 1, 1, 1, 0, 0, 0, 1, 0, 1, 1, 1],
+         [1, 1, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1],
+         [1, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1],
+         [1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 1],
+         [0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 1, 1],
+         [0, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1],
+         [0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 0, 1],
+         [1, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 1],
+         [0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 1, 1],
+         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0]]
+
+class GolayCode:
+    
+    def __init__(self, B=B_sub, k=12, n=24):
+        """Constructor"""
+        self.k = k
+        self.n = n
+        self.B = np.array([np.array(i) for i in B])
+        G = np.zeros((k, n))
+        G[::, 0: k], G[::, k:] = np.eye(k), B
+        self.G = G
+        H = np.zeros((n, k))
+        H[0:k, ::], H[k:, ::] = np.eye(k), B
+        self.H = H
+
+    def code(self, arr):
+        return np.dot(np.array(arr), self.G) % 2
+
+    def findSyndrome(self, w, H):
+        return np.dot(np.array(w), H) % 2
+
+    def wt(self, w):
+        return list(w).count(1)
+
+    def findU(self, w):
+        s = self.findSyndrome(w, self.H)
+        u = []
+        if self.wt(s) <= 3:
+            u = s + [0] * len(s)
+        else:
+            for i in range(len(self.B)):
+                sum = [(s[j] + self.B[i][j]) % 2 for j in range(len(s))]
+                if self.wt(sum) <= 2:
+                    u = sum + [1 if j == i else 0 for j in range(len(s))]
+                    break
+
+        b = self.findSyndrome(s, self.B)
+        if self.wt(b) <= 3:
+            u = ([0] * len(b) + b)[0:12]
+        else:
+            for i in range(len(self.B)):
+                sum = [(b[j] + self.B[i][j]) % 2 for j in range(len(b))]
+                if self.wt(sum) <= 2:
+                    u = ([1 if j == i else 0 for j in range(len(b))] + sum)[0:12]
+                    break
+
+        return [(u[i] + w[i]) % 2 for i in range(len(u))]
+        
+if __name__ == "__main__":
+    k = 12
+    n = 24
+    cur = GolayCode()
+    
+    syndrome = [1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1]
+    
+    coded_syndrome = cur.code(syndrome)
+    coded_syndrome[4] = 0 if coded_syndrome[4] == 1 else 1
+    coded_syndrome[1] = 0 if coded_syndrome[1] == 1 else 1
+    coded_syndrome[7] = 0 if coded_syndrome[7] == 1 else 1
+    decoded_syndrome = cur.findU(coded_syndrome)
+    
+    print("Syndrome: " + str(syndrome))
+    print("Decoded syndrome: " + str(decoded_syndrome))
+    print("Coded syndrome: " + str(coded_syndrome))
+
+    diff = [0 if syndrome[i] == decoded_syndrome[i] else 1 for i in range(len(syndrome))]
+    print("Difference: " + str(diff))
